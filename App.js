@@ -94,8 +94,8 @@ const QuranApp = () => {
     <View style={styles.surahItem}>
       <TouchableOpacity onPress={() => handlePress(item.number)}>
         <View style={styles.surahInfo}>
-          <Text style={styles.surahNumber}>{item.number}</Text>
-          <View>
+          <View style={styles.leftSection}>
+            <Text style={styles.surahNumber}>{item.number}</Text>
             <Text style={styles.surahNameItem}>{item.englishName}</Text>
             <Text style={styles.surahDetails}>
               {item.revelationType.toUpperCase()} - {item.numberOfAyahs} VERSES
@@ -237,8 +237,11 @@ const styles = StyleSheet.create({
   },
   surahInfo: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start', // Align items to the left
     alignItems: 'center',
+  },
+  leftSection: {
+    flex: 1,
   },
   surahNumber: {
     fontSize: 24,
