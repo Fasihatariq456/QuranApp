@@ -1,54 +1,126 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, LayoutAnimation, UIManager, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  FlatList,
+  LayoutAnimation,
+  UIManager,
+  Platform,
+} from 'react-native';
 
+// Enable Layout Animation for Android
 if (Platform.OS === 'android') {
-  UIManager.setLayoutAnimationEnabledExperimental && UIManager.setLayoutAnimationEnabledExperimental(true);
+  UIManager.setLayoutAnimationEnabledExperimental &&
+    UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const QuranApp = () => {
-  const [surahData, setSurahData] = useState([]);      // State to store fetched Surah data
-  const [loading, setLoading] = useState(true);        // State to manage loading indicator
-  const [selectedSurah, setSelectedSurah] = useState(null); // State for selected Surah details
-  const [expandedSurahId, setExpandedSurahId] = useState(null); // Track which Surah is expanded
-  const [animation, setAnimation] = useState(new Animated.Value(0)); // For slide-down animation
+// Custom Hook for fetching Surah List
+const useSurahList = () => {
+  const [surahData, setSurahData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Fetch Surah data from the API when component mounts
   useEffect(() => {
-    fetch('https://api.alquran.cloud/v1/surah')
-      .then(response => response.json())
-      .then(data => {
-        setSurahData(data.data);  // Set Surah data from API response
-        setLoading(false);        // Hide loading indicator
-      })
-      .catch(error => {
-        console.error('Error fetching data:', error);
-        setLoading(false);        // Hide loading indicator in case of error
-      });
+    const fetchSurahList = async () => {
+      try {
+        const response = await fetch('https://api.alquran.cloud/v1/surah');
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        const data = await response.json();
+        setSurahData(data.data);
+      } catch (err) {
+        setError(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSurahList();
   }, []);
 
-  // Fetch details for a specific Surah
-  const fetchSurahDetails = (surahId) => {
-    if (expandedSurahId === surahId) {
-      // If the Surah is already expanded, collapse it
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); // Animate closing
-      setExpandedSurahId(null);
-      return;
-    }
+  return { surahData, loading, error };
+};
 
-    setLoading(true);  // Show loading indicator when fetching details
-    fetch(`https://api.alquran.cloud/v1/surah/${surahId}/en.asad`)
-      .then(response => response.json())
-      .then(data => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); // Smooth expansion animation
-        setSelectedSurah(data.data);  // Set the detailed Surah
-        setExpandedSurahId(surahId);  // Track which Surah is expanded
-        setLoading(false);            // Hide loading indicator
-      })
-      .catch(error => {
-        console.error('Error fetching Surah details:', error);
-        setLoading(false);            // Hide loading indicator in case of error
-      });
+// Custom Hook for fetching Surah Details
+const useSurahDetails = () => {
+  const [selectedSurah, setSelectedSurah] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchSurahDetails = async (surahId) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`https://api.alquran.cloud/v1/surah/${surahId}/en.asad`);
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      const data = await response.json();
+      setSelectedSurah(data.data);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  return { selectedSurah, loading, error, fetchSurahDetails };
+};
+
+// Main Component
+const QuranApp = () => {
+  const { surahData, loading: loadingList, error: errorList } = useSurahList();
+  const { selectedSurah, loading: loadingDetails, error: errorDetails, fetchSurahDetails } = useSurahDetails();
+  const [expandedSurahId, setExpandedSurahId] = useState(null); // Track which Surah is expanded
+
+  const handlePress = (surahId) => {
+    if (expandedSurahId === surahId) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setExpandedSurahId(null);
+    } else {
+      fetchSurahDetails(surahId);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setExpandedSurahId(surahId);
+    }
+  };
+
+  const renderItem = ({ item }) => (
+    <View style={styles.surahItem}>
+      <TouchableOpacity onPress={() => handlePress(item.number)}>
+        <View style={styles.surahInfo}>
+          <Text style={styles.surahNumber}>{item.number}</Text>
+          <View>
+            <Text style={styles.surahNameItem}>{item.englishName}</Text>
+            <Text style={styles.surahDetails}>
+              {item.revelationType.toUpperCase()} - {item.numberOfAyahs} VERSES
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      <Text style={styles.surahArabic}>{item.name}</Text>
+
+      {/* Display detailed Surah when selected */}
+      {expandedSurahId === item.number && selectedSurah && (
+        <View style={styles.expandedSurahContainer}>
+          <Text style={styles.surahDetailsText}>
+            {selectedSurah.ayahs.map((ayah, idx) => (
+              <Text key={idx}>
+                {ayah.numberInSurah}. {ayah.text}
+                {'\n'}
+              </Text>
+            ))}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -80,40 +152,19 @@ const QuranApp = () => {
       </View>
 
       {/* Loading indicator */}
-      {loading ? (
+      {loadingList ? (
         <ActivityIndicator size="large" color="#6C63FF" />
       ) : (
-        <ScrollView style={styles.surahList}>
-          {surahData.map((surah, index) => (
-            <View key={index} style={styles.surahItem}>
-              <TouchableOpacity onPress={() => fetchSurahDetails(surah.number)}>
-                <View style={styles.surahInfo}>
-                  <Text style={styles.surahNumber}>{surah.number}</Text>
-                  <View>
-                    <Text style={styles.surahNameItem}>{surah.englishName}</Text>
-                    <Text style={styles.surahDetails}>{surah.revelationType.toUpperCase()} - {surah.numberOfAyahs} VERSES</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              <Text style={styles.surahArabic}>{surah.name}</Text>
-
-              {/* Display detailed Surah when selected */}
-              {expandedSurahId === surah.number && selectedSurah && (
-                <View style={styles.expandedSurahContainer}>
-                  <Text style={styles.surahDetailsText}>
-                    {selectedSurah.ayahs.map((ayah, idx) => (
-                      <Text key={idx}>
-                        {ayah.numberInSurah}. {ayah.text}{"\n"}
-                      </Text>
-                    ))}
-                  </Text>
-                </View>
-              )}
-            </View>
-          ))}
-        </ScrollView>
+        <FlatList
+          data={surahData}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.number.toString()}
+        />
       )}
+
+      {/* Error handling */}
+      {errorList && <Text style={styles.errorText}>Error fetching Surah list: {errorList.message}</Text>}
+      {errorDetails && <Text style={styles.errorText}>Error fetching Surah details: {errorDetails.message}</Text>}
     </View>
   );
 };
@@ -171,9 +222,6 @@ const styles = StyleSheet.create({
   tabText: {
     color: '#A0A3BD',
   },
-  surahList: {
-    marginTop: 10,
-  },
   surahItem: {
     flexDirection: 'column',
     justifyContent: 'space-between',
@@ -184,45 +232,45 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     shadowColor: '#000',
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
     elevation: 2,
   },
   surahInfo: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   surahNumber: {
-    backgroundColor: '#6C63FF',
-    color: '#fff',
-    borderRadius: 8,
-    width: 30,
-    height: 30,
-    textAlign: 'center',
-    lineHeight: 30,
-    marginRight: 10,
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#6C63FF',
   },
   surahNameItem: {
     fontSize: 18,
     fontWeight: 'bold',
   },
   surahDetails: {
-    color: '#A0A3BD',
     fontSize: 14,
+    color: '#A0A3BD',
   },
   surahArabic: {
-    fontSize: 20,
-    color: '#6C63FF',
-    fontWeight: 'bold',
+    fontSize: 30,
+    textAlign: 'right',
   },
   expandedSurahContainer: {
     marginTop: 10,
+    backgroundColor: '#E9E9E9',
     padding: 10,
-    backgroundColor: '#F0F0F0',
-    borderRadius: 10,
+    borderRadius: 8,
   },
   surahDetailsText: {
-    fontSize: 16,
-    color: '#000',
+    fontSize: 14,
+    color: '#333',
+  },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginTop: 10,
   },
 });
 
