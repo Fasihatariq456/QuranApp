@@ -1,7 +1,55 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, LayoutAnimation, UIManager, Platform } from 'react-native';
+
+if (Platform.OS === 'android') {
+  UIManager.setLayoutAnimationEnabledExperimental && UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const QuranApp = () => {
+  const [surahData, setSurahData] = useState([]);      // State to store fetched Surah data
+  const [loading, setLoading] = useState(true);        // State to manage loading indicator
+  const [selectedSurah, setSelectedSurah] = useState(null); // State for selected Surah details
+  const [expandedSurahId, setExpandedSurahId] = useState(null); // Track which Surah is expanded
+  const [animation, setAnimation] = useState(new Animated.Value(0)); // For slide-down animation
+
+  // Fetch Surah data from the API when component mounts
+  useEffect(() => {
+    fetch('https://api.alquran.cloud/v1/surah')
+      .then(response => response.json())
+      .then(data => {
+        setSurahData(data.data);  // Set Surah data from API response
+        setLoading(false);        // Hide loading indicator
+      })
+      .catch(error => {
+        console.error('Error fetching data:', error);
+        setLoading(false);        // Hide loading indicator in case of error
+      });
+  }, []);
+
+  // Fetch details for a specific Surah
+  const fetchSurahDetails = (surahId) => {
+    if (expandedSurahId === surahId) {
+      // If the Surah is already expanded, collapse it
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); // Animate closing
+      setExpandedSurahId(null);
+      return;
+    }
+
+    setLoading(true);  // Show loading indicator when fetching details
+    fetch(`https://api.alquran.cloud/v1/surah/${surahId}/en.asad`)
+      .then(response => response.json())
+      .then(data => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); // Smooth expansion animation
+        setSelectedSurah(data.data);  // Set the detailed Surah
+        setExpandedSurahId(surahId);  // Track which Surah is expanded
+        setLoading(false);            // Hide loading indicator
+      })
+      .catch(error => {
+        console.error('Error fetching Surah details:', error);
+        setLoading(false);            // Hide loading indicator in case of error
+      });
+  };
+
   return (
     <View style={styles.container}>
       {/* Last Read Section */}
@@ -9,9 +57,9 @@ const QuranApp = () => {
         <Text style={styles.lastReadText}>📖 Last Read</Text>
         <Text style={styles.surahName}>Al-Fatiah</Text>
         <Text style={styles.ayahText}>Ayah No: 1</Text>
-        <Image 
-          source={{ uri: 'https://cdn-icons-png.flaticon.com/512/1184/1184874.png' }} 
-          style={styles.bookImage} 
+        <Image
+          source={{ uri: 'https://cdn-icons-png.flaticon.com/512/1184/1184874.png' }}
+          style={styles.bookImage}
         />
       </View>
 
@@ -31,33 +79,46 @@ const QuranApp = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Surah List */}
-      <ScrollView style={styles.surahList}>
-        {surahData.map((surah, index) => (
-          <View key={index} style={styles.surahItem}>
-            <View style={styles.surahInfo}>
-              <Text style={styles.surahNumber}>{surah.number}</Text>
-              <View>
-                <Text style={styles.surahNameItem}>{surah.name}</Text>
-                <Text style={styles.surahDetails}>{surah.type} - {surah.verses} VERSES</Text>
-              </View>
+      {/* Loading indicator */}
+      {loading ? (
+        <ActivityIndicator size="large" color="#6C63FF" />
+      ) : (
+        <ScrollView style={styles.surahList}>
+          {surahData.map((surah, index) => (
+            <View key={index} style={styles.surahItem}>
+              <TouchableOpacity onPress={() => fetchSurahDetails(surah.number)}>
+                <View style={styles.surahInfo}>
+                  <Text style={styles.surahNumber}>{surah.number}</Text>
+                  <View>
+                    <Text style={styles.surahNameItem}>{surah.englishName}</Text>
+                    <Text style={styles.surahDetails}>{surah.revelationType.toUpperCase()} - {surah.numberOfAyahs} VERSES</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              <Text style={styles.surahArabic}>{surah.name}</Text>
+
+              {/* Display detailed Surah when selected */}
+              {expandedSurahId === surah.number && selectedSurah && (
+                <View style={styles.expandedSurahContainer}>
+                  <Text style={styles.surahDetailsText}>
+                    {selectedSurah.ayahs.map((ayah, idx) => (
+                      <Text key={idx}>
+                        {ayah.numberInSurah}. {ayah.text}{"\n"}
+                      </Text>
+                    ))}
+                  </Text>
+                </View>
+              )}
             </View>
-            <Text style={styles.surahArabic}>{surah.arabic}</Text>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 };
 
-// Sample Surah Data
-const surahData = [
-  { number: 1, name: 'Al-Fatiah', type: 'MECCAN', verses: 7, arabic: 'ٱلْفَاتِحَة' },
-  { number: 2, name: 'Al-Baqarah', type: 'MEDINIAN', verses: 286, arabic: 'الْبَقَرَة' },
-  { number: 3, name: 'Ali `Imran', type: 'MECCAN', verses: 200, arabic: 'آلِ عِمْرَان' },
-  { number: 4, name: 'An-Nisa', type: 'MECCAN', verses: 176, arabic: 'النِّسَاء' },
-];
-
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -114,9 +175,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   surahItem: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 15,
     paddingVertical: 10,
     paddingHorizontal: 15,
@@ -153,6 +213,16 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#6C63FF',
     fontWeight: 'bold',
+  },
+  expandedSurahContainer: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 10,
+  },
+  surahDetailsText: {
+    fontSize: 16,
+    color: '#000',
   },
 });
 
